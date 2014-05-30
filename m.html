@@ -1,27 +1,3 @@
-<style>
-m-drawer::shadow #panel {
-  display: block;
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  width: 75%;
-  will-change: transform;
-  overflow-y: scroll;
-}
-
-m-drawer::shadow #mask {
-  display: block;
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  will-change: opacity;
-  background-color: black;
-  opacity: 0.5;
-}
-</style>
 <script>
 "use strict";
 
@@ -54,7 +30,12 @@ m.setAttrs = function(element, attrs) {
   if (attrs) {
     var names = Object.getOwnPropertyNames(attrs);
     for (var i = 0; i < names.length; ++i) {
-      element.setAttribute(names[i], attrs[names[i]]);
+      var name = names[i];
+      var value = attrs[name];
+      if (name === 'style')
+        m.setStyle(element, value);
+      else
+        element.setAttribute(name, value);
     }
   }
   return element;
@@ -69,6 +50,15 @@ m.createShadow = function(parent, children) {
   return m.append(parent.createShadowRoot(), children);
 }
 
+m.setStyle = function(element, style) {
+  var names = Object.getOwnPropertyNames(style);
+  for (var i = 0; i < names.length; ++i) {
+    var name = names[i];
+    element.style[name] = style[name];
+  }
+  return element;
+};
+
 // m-drawer ------------------------------------------------------------------
 
 var DrawerPrototype = Object.create(HTMLElement.prototype);
@@ -76,10 +66,31 @@ var DrawerPrototype = Object.create(HTMLElement.prototype);
 DrawerPrototype.createdCallback = function() {
   this.player_ = null;
   var shadow = m.createShadow(this, [
-    m.create('div', {id: 'mask'}),
-    m.create('div', {id: 'panel'},
+    m.create('div', { id: 'mask',
+      style: {
+        position: 'absolute',
+        top: 0,
+        bottom: 0,
+        left: 0,
+        right: 0,
+        'will-change': 'opacity',
+        'background-color': 'black',
+        opacity: 0.5,
+      }}),
+    m.create('div', { id: 'panel',
+      style: {
+        position: 'absolute',
+        top: 0,
+        bottom: 0,
+        left: 0,
+        width: '75%',
+        'will-change': 'transform',
+        'overflow-y': 'scroll',
+      }},
       m.create('content')),
   ]);
+  this.mask_ = shadow.getElementById('mask');
+  this.panel_ = shadow.getElementById('panel');
   this.addEventListener('touchstart', DrawerPrototype.handleTouchStart_);
   this.addEventListener('touchmove', DrawerPrototype.handleTouchMove_);
   this.addEventListener('touchend', DrawerPrototype.handleTouchEnd_);
@@ -87,7 +98,8 @@ DrawerPrototype.createdCallback = function() {
 };
 
 DrawerPrototype.attachedCallback = function() {
-  // this.style.transform = 'translateX(-100%)';
+  this.mask_.style.display = 'none';
+  this.panel_.style.transform = 'translateX(-100%)';
 };
 
 DrawerPrototype.handleTouchStart_ = function(evt) {
@@ -106,16 +118,16 @@ DrawerPrototype.handleTouchCancel_ = function(evt) {
 DrawerPrototype.stop = function() {
   if (!this.player_)
     return;
-  var transform = global.getComputedStyle(this).getPropertyValue('transform'); 
+  var transform = global.getComputedStyle(this.panel_).getPropertyValue('transform'); 
   this.player_.cancel();
   this.player_ = null;
-  this.style.transform = transform;
+  this.panel_.style.transform = transform;
 };
 
 DrawerPrototype.settle_ = function(transform) {
   this.stop();
-  this.player_ = this.animate([
-    { transform: this.style.transform },
+  this.player_ = this.panel_.animate([
+    { transform: this.panel_.style.transform },
     { transform: transform }
   ], {
     duration: 800,
