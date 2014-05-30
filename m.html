@@ -1,0 +1,140 @@
+<style>
+m-drawer::shadow #panel {
+  display: block;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 75%;
+  will-change: transform;
+  overflow-y: scroll;
+}
+
+m-drawer::shadow #mask {
+  display: block;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  will-change: opacity;
+  background-color: black;
+  opacity: 0.5;
+}
+</style>
+<script>
+"use strict";
+
+(function(global) {
+
+// m -------------------------------------------------------------------------
+
+var m = {};
+
+m.append = function(parent, children) {
+  if (children) {
+    if (typeof children === 'string') {
+      parent.appendChild(global.document.createTextNode(children));
+    } else if (children.hasOwnProperty('length')) {
+      for (var i = 0; i < children.length; ++i) {
+        var child = children[i];
+        if (typeof child === 'string')
+          parent.appendChild(global.document.createTextNode(children));
+        else
+          parent.appendChild(child);
+      }
+    } else {
+      parent.appendChild(children);
+    }
+  }
+  return parent;
+};
+
+m.setAttrs = function(element, attrs) {
+  if (attrs) {
+    var names = Object.getOwnPropertyNames(attrs);
+    for (var i = 0; i < names.length; ++i) {
+      element.setAttribute(names[i], attrs[names[i]]);
+    }
+  }
+  return element;
+};
+
+m.create = function(tag, attrs, children) {
+  var element = global.document.createElement(tag);
+  return m.append(m.setAttrs(element, attrs), children);
+};
+
+m.createShadow = function(parent, children) {
+  return m.append(parent.createShadowRoot(), children);
+}
+
+// m-drawer ------------------------------------------------------------------
+
+var DrawerPrototype = Object.create(HTMLElement.prototype);
+
+DrawerPrototype.createdCallback = function() {
+  this.player_ = null;
+  var shadow = m.createShadow(this, [
+    m.create('div', {id: 'mask'}),
+    m.create('div', {id: 'panel'},
+      m.create('content')),
+  ]);
+  this.addEventListener('touchstart', DrawerPrototype.handleTouchStart_);
+  this.addEventListener('touchmove', DrawerPrototype.handleTouchMove_);
+  this.addEventListener('touchend', DrawerPrototype.handleTouchEnd_);
+  this.addEventListener('touchcancel', DrawerPrototype.handleTouchCancel_);
+};
+
+DrawerPrototype.attachedCallback = function() {
+  // this.style.transform = 'translateX(-100%)';
+};
+
+DrawerPrototype.handleTouchStart_ = function(evt) {
+  this.stop();
+};
+
+DrawerPrototype.handleTouchMove_ = function(evt) {
+};
+
+DrawerPrototype.handleTouchEnd_ = function(evt) {
+};
+
+DrawerPrototype.handleTouchCancel_ = function(evt) {
+};
+
+DrawerPrototype.stop = function() {
+  if (!this.player_)
+    return;
+  var transform = global.getComputedStyle(this).getPropertyValue('transform'); 
+  this.player_.cancel();
+  this.player_ = null;
+  this.style.transform = transform;
+};
+
+DrawerPrototype.settle_ = function(transform) {
+  this.stop();
+  this.player_ = this.animate([
+    { transform: this.style.transform },
+    { transform: transform }
+  ], {
+    duration: 800,
+    fill: 'forwards',
+    easing: 'ease-in-out',
+  });
+};
+
+DrawerPrototype.open = function() {
+  this.settle_('translateX(0)');
+};
+
+DrawerPrototype.close = function() {
+  this.settle_('translateX(-100%)');
+};
+
+global.document.registerElement('m-drawer', {
+  prototype: DrawerPrototype,
+});
+
+})(this);
+</script>
