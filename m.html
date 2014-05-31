@@ -59,12 +59,218 @@ m.setStyle = function(element, style) {
   return element;
 };
 
-// m-drawer ------------------------------------------------------------------
+m.queueWrite = function(callback) {
+  // TODO(abarth): We should batch reads and writes.
+  global.requestAnimationFrame(function() {
+    callback();
+  });
+};
+
+function parseTransformMatrix(transform) {
+  return JSON.parse(transform.replace(/^\w+\((.*)\)$/,'[$1]'));
+}
+
+// Particle ------------------------------------------------------------------
+
+function Particle() {
+  this.position = 0;
+  this.velocity = 0;
+  this.previousTimeStamp_ = 0;
+}
+
+Particle.prototype.start = function(timeStamp, position) {
+  this.previousTimeStamp_ = timeStamp;
+  this.position = position;
+};
+
+Particle.prototype.move = function(timeStamp, position) {
+  this.velocity = (position - this.position) / (timeStamp - this.previousTimeStamp_);
+  this.position = position;
+  this.previousTimeStamp_ = timeStamp;
+};
+
+// Mechanics -----------------------------------------------------------------
+
+function Mechanics(lowerBarrier, upperBarrier) {
+  this.lowerBarrier = lowerBarrier;
+  this.upperBarrier = upperBarrier;
+}
+
+Mechanics.kMinVelocity = 0.4;
+Mechanics.kMaxSettleDurationMS = 600;
+
+Mechanics.prototype.coast = function(particle) {
+  var targetPosition = particle.velocity > 0 ? this.upperBarrier : this.lowerBarrier;
+  var duration = (particle.position - targetPosition) / particle.velocity
+  return {
+    targetPosition: targetPosition,
+    duration: duration,
+    easing: 'linear',
+  };
+}
+
+Mechanics.prototype.settle = function(particle, targetPosition) {
+  var displacement = Math.abs(particle.position - targetPosition);
+  var duration = displacement / Mechanics.kMinVelocity;
+  return {
+    targetPosition: targetPosition,
+    duration: Math.max(duration, Mechanics.kMaxSettleDurationMS),
+    easing: 'ease-in-out',
+  };
+}
+
+Mechanics.prototype.release = function(particle) {
+  if (Math.abs(particle.velocity) >= Mechanics.kMinVelocity)
+    return this.coast(particle);
+  var tippingPosition = (this.lowerBarrier + this.upperBarrier) / 2;
+  var targetPosition = (particle.position >= tippingPosition) ?
+      this.upperBarrier : this.lowerBarrier;
+  return this.settle(particle, targetPosition);
+};
+
+Mechanics.prototype.confine = function(particle) {
+  particle.position = Math.min(
+      this.upperBarrier, Math.max(this.lowerBarrier, particle.position));
+}
+
+// MechanicalController ------------------------------------------------------
+
+function MechanicalController(delegate, lowerBarrier, upperBarrier) {
+  this.delegate = delegate;
+  this.mechanics_ = new Mechanics(lowerBarrier, upperBarrier);
+  this.particle_ = new Particle();
+}
+
+MechanicalController.prototype.updateParticle_ = function(timeStamp, location) {
+  var deltaLocation = location - this.initialLocation_;
+  var position = this.initialPosition_ + deltaLocation;
+  this.particle_.move(timeStamp, position);
+  this.mechanics_.confine(this.particle_);
+};
+
+MechanicalController.prototype.start = function(timeStamp, location) {
+  this.delegate.stop();
+  this.initialPosition_ = this.delegate.getPosition();
+  this.initialLocation_ = location;
+  this.particle_.start(timeStamp, this.initialPosition_);
+};
+
+MechanicalController.prototype.move = function(timeStamp, location) {
+  this.updateParticle_(timeStamp, location)
+  this.delegate.setPosition(this.particle_.position);
+};
+
+MechanicalController.prototype.end = function(timeStamp, location) {
+  this.updateParticle_(timeStamp, location)
+  this.delegate.animateTo(this.mechanics_.release(this.particle_));
+};
+
+var kDrawerPanelWidth = 300;
+var kDrawerMaskMaxOpacity = 0.5;
+
+// DrawerController ----------------------------------------------------------
+
+function DrawerController(mask, panel) {
+  this.mask_ = mask;
+  this.panel_ = panel;
+  this.controller_ = new MechanicalController(this, 0, kDrawerPanelWidth);
+
+  this.panel_.addEventListener('touchstart', this.handleTouchStart_.bind(this));
+  this.panel_.addEventListener('touchmove', this.handleTouchMove_.bind(this));
+  this.panel_.addEventListener('touchend', this.handleTouchEnd_.bind(this));
+  this.panel_.addEventListener('touchcanel', this.handleTouchCancel_.bind(this));
+
+  this.mask_.addEventListener('click', this.handleMaskClick_.bind(this));
+}
+
+DrawerController.prototype.attachedCallback = function() {
+  this.setPosition(kDrawerPanelWidth);
+};
+
+DrawerController.prototype.handleMaskClick_ = function() {
+  // TODO(abarth): Close the drawer...
+};
+
+DrawerController.prototype.handleTouchStart_ = function(evt) {
+  this.controller_.start(evt.timeStamp, evt.changedTouches[0].clientX)
+};
+
+DrawerController.prototype.handleTouchMove_ = function(evt) {
+  this.controller_.move(evt.timeStamp, evt.changedTouches[0].clientX)
+};
+
+DrawerController.prototype.handleTouchEnd_ = function(evt) {
+  this.controller_.end(evt.timeStamp, evt.changedTouches[0].clientX)
+};
+
+DrawerController.prototype.handleTouchCancel_ = function(evt) {
+  this.controller_.end(evt.timeStamp, evt.changedTouches[0].clientX)
+};
+
+DrawerController.prototype.getPanelTransformForPosition_ = function(position) {
+  return 'translateX(' + (position - kDrawerPanelWidth).toFixed(2) + 'px)';
+};
+
+DrawerController.prototype.getMaskOpacityForPosition_ = function(position) {
+  return position / kDrawerPanelWidth * kDrawerMaskMaxOpacity;
+};
+
+DrawerController.prototype.stop = function() {
+  if (this.panelAnimation_)
+    this.panelAnimation_.cancel();
+  if (this.maskAnimation_)
+    this.maskAnimation_.cancel();
+};
+
+DrawerController.prototype.getPosition = function() {
+  var transform = global.getComputedStyle(this.panel_).getPropertyValue('transform');
+  var matrix = parseTransformMatrix(transform);
+  return matrix[4] + kDrawerPanelWidth;
+};
+
+DrawerController.prototype.setPosition = function(position) {
+  var maskOpacity = this.getMaskOpacityForPosition_(position);
+  var panelTransform = this.getPanelTransformForPosition_(position);
+
+  var self = this;
+  m.queueWrite(function() {
+    self.mask_.style.display = maskOpacity === 0 ? 'none' : 'initial';
+    self.mask_.style.opacity = maskOpacity;
+    self.panel_.style.transform = panelTransform;
+  });
+};
+
+// TODO(abarth): Make this function more elegant.
+DrawerController.prototype.animateTo = function(info) {
+  var timing = {
+    fill: 'forwards',
+    duration: info.duration,
+    easing: info.easing,
+  };
+
+  this.panelAnimation_ = this.panel_.animate([
+    { transform: this.panel_.style.transform },
+    { transform: this.getPanelTransformForPosition_(info.targetPosition) },
+  ], timing);
+
+  this.maskAnimation_ = this.mask_.animate([
+    { opacity: this.mask_.style.opacity },
+    { opacity: this.getMaskOpacityForPosition_(info.targetPosition) },
+  ], timing);
+
+  var self = this;
+  this.panelAnimation_.addEventListener('finish', function() {
+    requestAnimationFrame(function() {
+      self.setPosition(info.targetPosition);
+    });
+  });
+};
+
+// DrawerPrototype -----------------------------------------------------------
 
 var DrawerPrototype = Object.create(HTMLElement.prototype);
 
 DrawerPrototype.createdCallback = function() {
-  this.player_ = null;
   var shadow = m.createShadow(this, [
     m.create('div', { id: 'mask',
       style: {
@@ -75,7 +281,7 @@ DrawerPrototype.createdCallback = function() {
         right: 0,
         'will-change': 'opacity',
         'background-color': 'black',
-        opacity: 0.5,
+        opacity: kDrawerMaskMaxOpacity,
       }}),
     m.create('div', { id: 'panel',
       style: {
@@ -83,65 +289,20 @@ DrawerPrototype.createdCallback = function() {
         top: 0,
         bottom: 0,
         left: 0,
-        width: '75%',
+        width: kDrawerPanelWidth + 'px',
         'will-change': 'transform',
         'overflow-y': 'scroll',
       }},
       m.create('content')),
   ]);
-  this.mask_ = shadow.getElementById('mask');
-  this.panel_ = shadow.getElementById('panel');
-  this.addEventListener('touchstart', DrawerPrototype.handleTouchStart_);
-  this.addEventListener('touchmove', DrawerPrototype.handleTouchMove_);
-  this.addEventListener('touchend', DrawerPrototype.handleTouchEnd_);
-  this.addEventListener('touchcancel', DrawerPrototype.handleTouchCancel_);
+
+  this.controller_ = new DrawerController(
+    shadow.getElementById('mask'),
+    shadow.getElementById('panel'));
 };
 
 DrawerPrototype.attachedCallback = function() {
-  this.mask_.style.display = 'none';
-  this.panel_.style.transform = 'translateX(-100%)';
-};
-
-DrawerPrototype.handleTouchStart_ = function(evt) {
-  this.stop();
-};
-
-DrawerPrototype.handleTouchMove_ = function(evt) {
-};
-
-DrawerPrototype.handleTouchEnd_ = function(evt) {
-};
-
-DrawerPrototype.handleTouchCancel_ = function(evt) {
-};
-
-DrawerPrototype.stop = function() {
-  if (!this.player_)
-    return;
-  var transform = global.getComputedStyle(this.panel_).getPropertyValue('transform'); 
-  this.player_.cancel();
-  this.player_ = null;
-  this.panel_.style.transform = transform;
-};
-
-DrawerPrototype.settle_ = function(transform) {
-  this.stop();
-  this.player_ = this.panel_.animate([
-    { transform: this.panel_.style.transform },
-    { transform: transform }
-  ], {
-    duration: 800,
-    fill: 'forwards',
-    easing: 'ease-in-out',
-  });
-};
-
-DrawerPrototype.open = function() {
-  this.settle_('translateX(0)');
-};
-
-DrawerPrototype.close = function() {
-  this.settle_('translateX(-100%)');
+  this.controller_.attachedCallback();
 };
 
 global.document.registerElement('m-drawer', {
