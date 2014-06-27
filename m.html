@@ -234,10 +234,16 @@ DrawerPrototype.getMaskOpacityForPosition_ = function(position) {
 };
 
 DrawerPrototype.cancelAnimation_ = function() {
-  if (this.panelAnimation_)
-    this.panelAnimation_.cancel();
-  if (this.maskAnimation_)
-    this.maskAnimation_.cancel();
+  var panelAnimation_ = this.panelAnimation_;
+  var maskAnimation_ = this.maskAnimation_;
+
+  this.panelAnimation_ = null;
+  this.maskAnimation_ = null;
+
+  if (panelAnimation_)
+    panelAnimation_.cancel();
+  if (maskAnimation_)
+    maskAnimation_.cancel();
 };
 
 DrawerPrototype.stop = function() {
@@ -282,9 +288,9 @@ DrawerPrototype.startAnimation = function(info) {
 
   var self = this;
   this.panelAnimation_.addEventListener('finish', function() {
-    requestAnimationFrame(function() {
-      self.setPosition(info.targetPosition);
-    });
+    if (!this.panelAnimation_)
+      return;
+    self.setPosition(info.targetPosition);
   });
 };
 
