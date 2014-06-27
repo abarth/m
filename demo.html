@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<head>
+<meta name="viewport" content="width=device-width, user-scalable=no">
+<link rel="import" href="m.html">
+<style>
+body {
+    background-color: papayawhip;
+}
+#menu {
+    background-color: navajowhite;
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+}
+</style>
+</head>
+<body>
+<div id="header">
+<button onclick="document.querySelector('m-drawer').toggle();">Toggle drawer</button>
+</div>
+<m-drawer>
+  <div id="menu"></div>
+</m-drawer>
+</body>
