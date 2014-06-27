@@ -233,7 +233,9 @@ DrawerPrototype.getMaskOpacityForPosition_ = function(position) {
   return position / kDrawerPanelWidth * kDrawerMaskMaxOpacity;
 };
 
-DrawerPrototype.cancelAnimation_ = function() {
+DrawerPrototype.stop = function() {
+  var position = this.getPosition();
+
   var panelAnimation_ = this.panelAnimation_;
   var maskAnimation_ = this.maskAnimation_;
 
@@ -244,11 +246,7 @@ DrawerPrototype.cancelAnimation_ = function() {
     panelAnimation_.cancel();
   if (maskAnimation_)
     maskAnimation_.cancel();
-};
 
-DrawerPrototype.stop = function() {
-  var position = this.getPosition();
-  this.cancelAnimation_();
   this.setPosition(position);
 }
 
@@ -288,14 +286,14 @@ DrawerPrototype.startAnimation = function(info) {
 
   var self = this;
   this.panelAnimation_.addEventListener('finish', function() {
-    if (!this.panelAnimation_)
+    if (!self.panelAnimation_)
       return;
     self.setPosition(info.targetPosition);
   });
 };
 
 DrawerPrototype.animateToPosition = function(position) {
-  this.cancelAnimation_();
+  this.stop();
   this.startAnimation({
     targetPosition: position,
     duration: Mechanics.kMaxSettleDurationMS,
