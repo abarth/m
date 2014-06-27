@@ -94,7 +94,7 @@ Mechanics.kMaxSettleDurationMS = 300;
 
 Mechanics.prototype.coast = function(particle) {
   var targetPosition = particle.velocity > 0 ? this.upperBarrier : this.lowerBarrier;
-  var duration = (particle.position - targetPosition) / particle.velocity
+  var duration = (targetPosition - particle.position) / particle.velocity
   return {
     targetPosition: targetPosition,
     duration: duration,
@@ -142,7 +142,6 @@ MechanicalController.prototype.updateParticle_ = function(timeStamp, location) {
 };
 
 MechanicalController.prototype.start = function(timeStamp, location) {
-  this.delegate.stop();
   this.initialPosition_ = this.delegate.getPosition();
   this.initialLocation_ = location;
   this.particle_.start(timeStamp, this.initialPosition_);
@@ -154,7 +153,6 @@ MechanicalController.prototype.move = function(timeStamp, location) {
 };
 
 MechanicalController.prototype.end = function(timeStamp, location) {
-  this.updateParticle_(timeStamp, location)
   this.delegate.startAnimation(this.mechanics_.release(this.particle_));
 };
 
@@ -211,6 +209,7 @@ DrawerPrototype.handleMaskClick_ = function() {
 };
 
 DrawerPrototype.handleTouchStart_ = function(evt) {
+  this.stop();
   this.controller_.start(evt.timeStamp, evt.changedTouches[0].clientX)
 };
 
@@ -234,12 +233,18 @@ DrawerPrototype.getMaskOpacityForPosition_ = function(position) {
   return position / kDrawerPanelWidth * kDrawerMaskMaxOpacity;
 };
 
-DrawerPrototype.stop = function() {
+DrawerPrototype.cancelAnimation_ = function() {
   if (this.panelAnimation_)
     this.panelAnimation_.cancel();
   if (this.maskAnimation_)
     this.maskAnimation_.cancel();
 };
+
+DrawerPrototype.stop = function() {
+  var position = this.getPosition();
+  this.cancelAnimation_();
+  this.setPosition(position);
+}
 
 DrawerPrototype.getPosition = function() {
   var transform = global.getComputedStyle(this.panel_).getPropertyValue('transform');
@@ -284,7 +289,7 @@ DrawerPrototype.startAnimation = function(info) {
 };
 
 DrawerPrototype.animateToPosition = function(position) {
-  this.stop();
+  this.cancelAnimation_();
   this.startAnimation({
     targetPosition: position,
     duration: Mechanics.kMaxSettleDurationMS,
