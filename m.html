@@ -174,7 +174,8 @@ DrawerPrototype.createdCallback = function() {
         right: 0,
         'will-change': 'opacity',
         'background-color': 'black',
-        opacity: kDrawerMaskMaxOpacity,
+        opacity: 0,
+        display: 'none',
       }}),
     m.create('div', { id: 'panel',
       style: {
@@ -184,6 +185,7 @@ DrawerPrototype.createdCallback = function() {
         left: 0,
         width: kDrawerPanelWidth + 'px',
         'will-change': 'transform',
+        transform: 'translateX(-' + kDrawerPanelWidth + 'px)',
       }},
       m.create('content')),
   ]);
@@ -199,10 +201,6 @@ DrawerPrototype.createdCallback = function() {
 
   this.mask_.addEventListener('click', this.handleMaskClick_.bind(this));
 }
-
-DrawerPrototype.attachedCallback = function() {
-  this.setPosition(0);
-};
 
 DrawerPrototype.handleMaskClick_ = function() {
   this.close();
